@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>رحلة العودة إلى الأرض - رائد الفضاء التائه</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Cairo', 'sans-serif'],
+            mono: ['Space Mono', 'Outfit', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts: Cairo & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Outfit:wght@400;600;700;800&family=Space+Mono:wght@700&display=swap" rel="stylesheet">
+
+  <!-- React 18 & Babel للتشغيل المباشر في المتصفح -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    @keyframes starFloat {
+      0%, 100% { transform: translateY(0px) rotate(0deg); }
+      50% { transform: translateY(-8px) rotate(2deg); }
+    }
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 0.6; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.05); }
+    }
+    @keyframes shakeAngry {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-6px) rotate(-2deg); }
+      40% { transform: translateX(6px) rotate(2deg); }
+      60% { transform: translateX(-4px) rotate(-1deg); }
+      80% { transform: translateX(4px) rotate(1deg); }
+    }
+    @keyframes bounceHappy {
+      0%, 100% { transform: translateY(0) scale(1); }
+      40% { transform: translateY(-16px) scale(1.08); }
+      60% { transform: translateY(-6px) scale(1.03); }
+    }
+    .animate-star-float { animation: starFloat 4s ease-in-out infinite; }
+    .animate-pulse-glow { animation: pulseGlow 2.5s ease-in-out infinite; }
+    .animate-shake-angry { animation: shakeAngry 0.5s ease-in-out; }
+    .animate-bounce-happy { animation: bounceHappy 0.6s cubic-bezier(0.17, 0.89, 0.32, 1.49); }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 antialiased select-none overflow-x-hidden font-sans">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // --- محرك الصوت الاصطناعي الفضائي (Web Audio API - بدون أي ملفات خارجية) ---
+    class SoundEngine {
+      constructor() {
+        this.ctx = null;
+        this.sfxGain = null;
+        this.musicGain = null;
+        this.isMuted = false;
+        this.isMusicPlaying = false;
+        this.musicInterval = null;
+      }
+
+      initContext() {
+        if (!this.ctx) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioCtx();
+          this.sfxGain = this.ctx.createGain();
+          this.sfxGain.gain.value = 0.4;
+          this.sfxGain.connect(this.ctx.destination);
+
+          this.musicGain = this.ctx.createGain();
+          this.musicGain.gain.value = 0.2;
+          this.musicGain.connect(this.ctx.destination);
+        }
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+
+      setMute(muted) {
+        this.isMuted = muted;
+        if (this.musicGain) this.musicGain.gain.value = muted ? 0 : 0.2;
+        if (this.sfxGain) this.sfxGain.gain.value = muted ? 0 : 0.4;
+        if (muted && this.musicInterval) this.stopMusic();
+      }
+
+      toggleMute() {
+        this.setMute(!this.isMuted);
+        return this.isMuted;
+      }
+
+      startMusic() {
+        if (this.isMuted || this.isMusicPlaying) return;
+        this.initContext();
+        if (!this.ctx || !this.musicGain) return;
+        this.isMusicPlaying = true;
+
+        const chords = [
+          [174.61, 207.65, 261.63, 349.23],
+          [207.65, 261.63, 311.13, 415.30],
+          [233.08, 277.18, 349.23, 466.16],
+          [138.59, 207.65, 277.18, 329.63]
+        ];
+        let idx = 0;
+        const step = () => {
+          if (!this.ctx || !this.isMusicPlaying || this.isMuted) return;
+          const chord = chords[idx % chords.length];
+          idx++;
+          chord.forEach((f) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(f * 0.5, this.ctx.currentTime);
+            const now = this.ctx.currentTime;
+            gain.gain.setValueAtTime(0, now);
+            gain.gain.linearRampToValueAtTime(0.06, now + 1.2);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 3.8);
+            osc.connect(gain);
+            gain.connect(this.musicGain);
+            osc.start(now);
+            osc.stop(now + 4);
+          });
+        };
+        step();
+        this.musicInterval = setInterval(step, 4000);
+      }
+
+      stopMusic() {
+        this.isMusicPlaying = false;
+        if (this.musicInterval) clearInterval(this.musicInterval);
+      }
+
+      playCorrect() {
+        if (this.isMuted) return;
+        this.initContext();
+        const now = this.ctx.currentTime;
+        [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, now + i * 0.08);
+          gain.gain.setValueAtTime(0, now + i * 0.08);
+          gain.gain.linearRampToValueAtTime(0.25, now + i * 0.08 + 0.03);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.08 + 0.45);
+          osc.connect(gain);
+          gain.connect(this.sfxGain);
+          osc.start(now + i * 0.08);
+          osc.stop(now + i * 0.08 + 0.5);
+        });
+      }
+
+      playWrong() {
+        if (this.isMuted) return;
+        this.initContext();
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(260, now);
+        osc.frequency.linearRampToValueAtTime(130, now + 0.4);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.45);
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+        osc.start(now);
+        osc.stop(now + 0.5);
+      }
+
+      playCoin() {
+        if (this.isMuted) return;
+        this.initContext();
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(987.77, now);
+        osc.frequency.setValueAtTime(1318.51, now + 0.08);
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.25, now + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+        osc.start(now);
+        osc.stop(now + 0.36);
+      }
+
+      playJackpot() {
+        if (this.isMuted) return;
+        this.initContext();
+        const now = this.ctx.currentTime;
+        [587.33, 739.99, 880.00, 1174.66, 1479.98, 1760.00].forEach((f, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(f, now + idx * 0.06);
+          gain.gain.setValueAtTime(0.2, now + idx * 0.06);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.06 + 0.3);
+          osc.connect(gain);
+          gain.connect(this.sfxGain);
+          osc.start(now + idx * 0.06);
+          osc.stop(now + idx * 0.06 + 0.32);
+        });
+      }
+
+      playFirework() {
+        if (this.isMuted) return;
+        this.initContext();
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain1 = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(160, now);
+        osc.frequency.exponentialRampToValueAtTime(30, now + 0.3);
+        gain1.gain.setValueAtTime(0.35, now);
+        gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+        osc.connect(gain1);
+        gain1.connect(this.sfxGain);
+        osc.start(now);
+        osc.stop(now + 0.36);
+      }
+
+      playVictory() {
+        if (this.isMuted) return;
+        this.initContext();
+        const now = this.ctx.currentTime;
+        const notes = [261.63, 392.00, 523.25, 659.25, 783.99, 1046.50];
+        notes.forEach((f, i) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(f, now + i * 0.15);
+          gain.gain.setValueAtTime(0, now + i * 0.15);
+          gain.gain.linearRampToValueAtTime(0.25, now + i * 0.15 + 0.05);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.15 + 0.6);
+          osc.connect(gain);
+          gain.connect(this.sfxGain);
+          osc.start(now + i * 0.15);
+          osc.stop(now + i * 0.15 + 0.7);
+        });
+      }
+
+      playClick() {
+        if (this.isMuted) return;
+        this.initContext();
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, now);
+        gain.gain.setValueAtTime(0.08, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+        osc.start(now);
+        osc.stop(now + 0.06);
+      }
+    }
+
+    const sound = new SoundEngine();
+
+    // --- بنك الأسئلة الفلكية ---
+    const QUESTIONS = [
+      {
+        question: 'ما هو أقرب كوكب إلى الشمس في مجموعتنا الشمسية؟',
+        options: ['عطارد', 'الزهرة', 'المريخ', 'الأرض'],
+        correct: 0,
+        explanation: 'عطارد هو الكوكب الأقرب للشمس ويتحرك بأعلى سرعة مدارية بين الكواكب.'
+      },
+      {
+        question: 'أي كواكب المجموعة الشمسية يعتبر الأكثر سخونة على الإطلاق؟',
+        options: ['عطارد', 'الزهرة', 'المشتري', 'المريخ'],
+        correct: 1,
+        explanation: 'الزهرة هو الأسخن بسبب غلافه الجوي الكثيف الغني بثاني أكسيد الكربون وظاهرة الاحتباس الحراري.'
+      },
+      {
+        question: 'لماذا يظهر كوكب المريخ باللون الأحمر المميز في السماء؟',
+        options: ['بسبب الحمم البركانية', 'بسبب وفرة أكسيد الحديد (الصدأ) على سطحه', 'بسبب قربه الشديد من الشمس', 'بسبب غاز النيتروجين'],
+        correct: 1,
+        explanation: 'رمال وصخور المريخ غنية جداً بأكسيد الحديد (الصدأ)، مما يمنحه مظهره الأحمر المميز.'
+      },
+      {
+        question: 'ما هو أكبر كوكب في المجموعة الشمسية حجماً وكتلة؟',
+        options: ['المشتري', 'زحل', 'نبتون', 'أورانوس'],
+        correct: 0,
+        explanation: 'المشتري عملاق غازي ضخم، وكتلته تعادل أكثر من ضعف كتلة باقي كواكب المجموعة الشمسية مجتمعة!'
+      },
+      {
+        question: '🌟 محطة الكنز والجوائز: كم تبلغ سرعة الضوء في الفراغ تقريباً؟',
+        options: ['150,000 كم/ثانية', '300,000 كم/ثانية', '500,000 كم/ثانية', '1,000,000 كم/ثانية'],
+        correct: 1,
+        isBonus: true,
+        explanation: 'سرعة الضوء القصوى في الفراغ تبلغ حوالي 299,792 كيلومتر في الثانية!'
+      },
+      {
+        question: 'مم تتكون حلقات كوكب زحل الشهيرة بشكل رئيسي؟',
+        options: ['من صخور نارية', 'من قطع الجليد والصخور والغبار الفضائي', 'من سحب غاز الميثان', 'من بلورات الألماس'],
+        correct: 1,
+        explanation: 'حلقات زحل تتكون بنسبة تفوق 90% من قطع الجليد المائي الممزوجة بجزيئات الصخور والغبار.'
+      },
+      {
+        question: 'ما هو الشكل التصنيفي لمجرتنا مجرة درب التبانة؟',
+        options: ['مجرة حلزونية ضلعية', 'مجرة بيضاوية الشكل', 'مجرة كروية منتظمة', 'مجرة عشوائية'],
+        correct: 0,
+        explanation: 'درب التبانة هي مجرة حلزونية ضلعية (Barred Spiral Galaxy) تحتوي على شريط مركزي من النجوم.'
+      },
+      {
+        question: '🌟 محطة الذهب النجمي: ما اسم الثقب الأسود الهائل في مركز مجرتنا درب التبانة؟',
+        options: ['الرامي أ* (Sagittarius A*)', 'سايغنس X-1', 'الوحش M87', 'ثقب غارغانتوا'],
+        correct: 0,
+        isBonus: true,
+        explanation: 'الثقب الأسود فائق الكتلة "الرامي أ*" تبلغ كتلته حوالي 4 ملايين ضعف كتلة شمسنا!'
+      },
+      {
+        question: 'في أي عام هبط أول إنسان على سطح القمر في مهمة أبولو 11 التاريخية؟',
+        options: ['1969', '1959', '1975', '1981'],
+        correct: 0,
+        explanation: 'في 20 يوليو 1969، وطأت قدما نيل أرمسترونغ سطح القمر معلناً خطوة صغيرة لإنسان وقفزة للبشرية.'
+      },
+      {
+        question: '🌟 محطة الكنز: أين يقع جبل "أوليمبوس مونس"، أعلى بركان في المجموعة الشمسية؟',
+        options: ['على كوكب المريخ', 'على كوكب الزهرة', 'على القمر الأرضي', 'على كوكب المشتري'],
+        correct: 0,
+        isBonus: true,
+        explanation: 'بركان أوليمبوس مونس على المريخ يبلغ ارتفاعه الشاهق قرابة 22 كيلومتراً (3 أضعاف قمة إيفرست)!'
+      }
+    ];
+
+    // --- محاكاة الألعاب النارية الاحتفالية عند الوصول للأرض ---
+    function Fireworks() {
+      const canvasRef = useRef(null);
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let particles = [];
+        const colors = ['#F59E0B', '#EF4444', '#10B981', '#3B82F6', '#EC4899', '#8B5CF6', '#FBBF24'];
+
+        const createBurst = (x, y) => {
+          sound.playFirework();
+          for (let i = 0; i < 60; i++) {
+            const angle = (Math.PI * 2 * i) / 60;
+            const speed = 1.5 + Math.random() * 5;
+            particles.push({
+              x, y,
+              vx: Math.cos(angle) * speed,
+              vy: Math.sin(angle) * speed,
+              alpha: 1,
+              color: colors[Math.floor(Math.random() * colors.length)],
+              decay: 0.015 + Math.random() * 0.02
+            });
+          }
+        };
+
+        createBurst(canvas.width * 0.3, canvas.height * 0.3);
+        setTimeout(() => createBurst(canvas.width * 0.7, canvas.height * 0.25), 500);
+
+        const timer = setInterval(() => {
+          createBurst(canvas.width * (0.2 + Math.random() * 0.6), canvas.height * (0.2 + Math.random() * 0.4));
+        }, 800);
+
+        let animId;
+        const render = () => {
+          ctx.fillStyle = 'rgba(2, 6, 23, 0.2)';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+          for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i];
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.05;
+            p.alpha -= p.decay;
+
+            if (p.alpha <= 0) {
+              particles.splice(i, 1);
+              continue;
+            }
+
+            ctx.save();
+            ctx.globalAlpha = p.alpha;
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+          animId = requestAnimationFrame(render);
+        };
+        render();
+
+        return () => {
+          clearInterval(timer);
+          cancelAnimationFrame(animId);
+        };
+      }, []);
+
+      return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none z-0" />;
+    }
+
+    // --- المكون الرئيسي للعبة ---
+    function App() {
+      const [view, setView] = useState('TITLE'); // 'TITLE', 'SOLO', 'DUEL', 'VICTORY'
+      const [coins, setCoins] = useState(250);
+      const [distance, setDistance] = useState(100000);
+      const [currentQIndex, setCurrentQIndex] = useState(0);
+      const [alienMood, setAlienMood] = useState('idle'); // 'idle', 'happy', 'angry'
+      const [alienQuote, setAlienQuote] = useState('مرحباً يا بطل! أجب عن أسئلتي الفلكية لتشغيل المحركات نحو كوكب الأرض!');
+      const [selectedOpt, setSelectedOpt] = useState(null);
+      const [isAnswered, setIsAnswered] = useState(false);
+      const [isMuted, setIsMuted] = useState(false);
+      const [showShop, setShowShop] = useState(false);
+
+      // وضع لاعبين على نفس الشاشة
+      const [p1Dist, setP1Dist] = useState(100000);
+      const [p2Dist, setP2Dist] = useState(100000);
+      const [p1Locked, setP1Locked] = useState(false);
+      const [p2Locked, setP2Locked] = useState(false);
+
+      const q = QUESTIONS[currentQIndex % QUESTIONS.length];
+
+      const handleAnswer = (idx) => {
+        if (isAnswered) return;
+        setSelectedOpt(idx);
+        setIsAnswered(true);
+
+        const isCorrect = idx === q.correct;
+        if (isCorrect) {
+          setAlienMood('happy');
+          const isBonus = q.isBonus;
+          const coinGain = isBonus ? 250 : 50;
+          const newDist = Math.max(0, distance - 10000);
+
+          if (isBonus) sound.playJackpot();
+          else sound.playCorrect();
+
+          setCoins(c => c + coinGain);
+          setDistance(newDist);
+          setAlienQuote(isBonus ? '🌟 محطة الكنز الفضائي! إجابة عبقرية وكوينز مضاعفة!' : '🎉 برافو يا رائد الفضاء! إجابة صحيحة، اقتربت 10,000 كم نحو الأرض!');
+
+          if (newDist <= 0) {
+            setTimeout(() => {
+              sound.playVictory();
+              setView('VICTORY');
+            }, 1200);
+          }
+        } else {
+          setAlienMood('angry');
+          sound.playWrong();
+          setDistance(d => Math.min(120000, d + 10000));
+          setAlienQuote('😡 يا إلهي! إجابة خاطئة! انجرفت مركبتك 10,000 كم بعيداً في الفضاء!');
+        }
+      };
+
+      const nextQuestion = () => {
+        sound.playClick();
+        setIsAnswered(false);
+        setSelectedOpt(null);
+        setAlienMood('idle');
+        setCurrentQIndex(i => i + 1);
+      };
+
+      const soloProgress = Math.round(((100000 - Math.max(0, distance)) / 100000) * 100);
+      const p1Prog = Math.round(((100000 - Math.max(0, p1Dist)) / 100000) * 100);
+      const p2Prog = Math.round(((100000 - Math.max(0, p2Dist)) / 100000) * 100);
+
+      return (
+        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between p-4 relative overflow-hidden">
+          
+          {/* شريط التحكم العلوي */}
+          <header className="max-w-5xl w-full mx-auto flex items-center justify-between p-3 bg-slate-900/80 border border-slate-800 rounded-2xl shadow-xl z-10 backdrop-blur-md">
+            <div className="flex items-center gap-2">
+              <button onClick={() => { sound.playClick(); setView('TITLE'); }} className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-bold">
+                🏠 الرئيسية
+              </button>
+              <button onClick={() => { const m = sound.toggleMute(); setIsMuted(m); }} className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-bold">
+                {isMuted ? '🔇 مكتوم' : '🔊 صوت'}
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 font-mono font-bold text-amber-300 bg-amber-500/10 px-3 py-1.5 rounded-xl border border-amber-500/30 text-sm">
+              <span>💰 {coins.toLocaleString()} كوينز</span>
+            </div>
+
+            <button onClick={() => { sound.playClick(); setShowShop(true); }} className="px-3.5 py-1.5 bg-cyan-500 text-slate-950 font-bold rounded-xl text-xs hover:bg-cyan-400">
+              🛍️ المتجر
+            </button>
+          </header>
+
+          {/* الشاشة 1: القائمة الرئيسية */}
+          {view === 'TITLE' && (
+            <main className="max-w-3xl w-full mx-auto my-auto text-center z-10 py-8 flex flex-col items-center">
+              <div className="text-7xl mb-4 animate-star-float">🚀 🪐 👽</div>
+              <h1 className="text-4xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-white to-emerald-400 mb-3">
+                رحلة العودة إلى الأرض
+              </h1>
+              <p className="text-sm sm:text-base text-slate-300 max-w-xl mx-auto mb-8 leading-relaxed">
+                رائد فضاء تائه على بعد 100,000 كم في الفضاء السحيق! أجب عن أسئلة الفضائي لتتقدم نحو الأرض واكسب الكوينز واشترِ بدلات وسفن فضاء جديدة.
+              </p>
+
+              <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
+                <button
+                  onClick={() => {
+                    sound.initContext();
+                    sound.startMusic();
+                    setDistance(100000);
+                    setView('SOLO');
+                  }}
+                  className="flex-1 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 font-black rounded-2xl shadow-xl hover:scale-105 transition-all text-base cursor-pointer"
+                >
+                  🚀 رحلة العودة (فردي)
+                </button>
+
+                <button
+                  onClick={() => {
+                    sound.initContext();
+                    sound.startMusic();
+                    setP1Dist(100000);
+                    setP2Dist(100000);
+                    setP1Locked(false);
+                    setP2Locked(false);
+                    setView('DUEL');
+                  }}
+                  className="flex-1 py-4 bg-gradient-to-r from-rose-500 to-amber-500 text-slate-950 font-black rounded-2xl shadow-xl hover:scale-105 transition-all text-base cursor-pointer"
+                >
+                  👥 تحدي شخصين (نفس الشاشة)
+                </button>
+              </div>
+            </main>
+          )}
+
+          {/* الشاشة 2: رحلة العودة الفردية */}
+          {view === 'SOLO' && (
+            <main className="max-w-4xl w-full mx-auto my-4 flex flex-col gap-4 z-10">
+              
+              {/* شريط المسافة المتبقية إلى كوكب الأرض */}
+              <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl shadow-xl">
+                <div className="flex justify-between items-center text-xs mb-2">
+                  <span className="text-purple-400 font-bold">🌌 الفضاء العميق (100,000 كم)</span>
+                  <span className="font-mono text-cyan-300 font-bold text-base">{distance.toLocaleString()} كم متبقية ({soloProgress}%)</span>
+                  <span className="text-emerald-400 font-bold">🌍 كوكب الأرض (0 كم)</span>
+                </div>
+                <div className="h-3 bg-slate-950 rounded-full border border-slate-800 overflow-hidden relative">
+                  <div className="h-full bg-gradient-to-l from-cyan-400 to-purple-600 transition-all duration-500" style={{ width: `${soloProgress}%` }} />
+                </div>
+              </div>
+
+              {/* الفضائي وتعبيرات الوجه */}
+              <div className={`p-4 rounded-2xl border flex items-center gap-4 transition-all ${
+                alienMood === 'happy' ? 'bg-emerald-950/40 border-emerald-500 ring-2 ring-emerald-500/30 animate-bounce-happy' :
+                alienMood === 'angry' ? 'bg-rose-950/40 border-rose-500 ring-2 ring-rose-500/30 animate-shake-angry' :
+                'bg-slate-900/80 border-slate-800'
+              }`}>
+                <div className="w-16 h-16 rounded-full bg-slate-800 border-2 border-cyan-400 flex items-center justify-center text-4xl shrink-0 shadow-lg">
+                  {alienMood === 'happy' ? '👽🎉' : alienMood === 'angry' ? '👾🔥' : '👽'}
+                </div>
+                <div className="text-right flex-1">
+                  <span className="text-xs font-bold text-emerald-300 block mb-1">الكابتن زوغي (مرشد الفضاء):</span>
+                  <p className="text-sm sm:text-base font-semibold text-slate-100">{alienQuote}</p>
+                </div>
+              </div>
+
+              {/* بطاقة السؤال والخيارات */}
+              <div className="bg-slate-900/95 border border-slate-800 p-6 rounded-3xl shadow-xl">
+                {q.isBonus && (
+                  <div className="p-2 mb-4 bg-amber-500/20 border border-amber-500/40 rounded-xl text-amber-300 text-xs sm:text-sm font-bold flex justify-between items-center">
+                    <span>🌟 محطة الكنز والجوائز: سؤال بـ +250 كوينز إضافية!</span>
+                    <span>💰 +250</span>
+                  </div>
+                )}
+
+                <h2 className="text-lg sm:text-2xl font-bold text-white mb-6 text-right leading-relaxed">
+                  {q.question}
+                </h2>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {q.options.map((opt, idx) => (
+                    <button
+                      key={idx}
+                      disabled={isAnswered}
+                      onClick={() => handleAnswer(idx)}
+                      className={`p-4 rounded-2xl border text-right font-semibold text-sm sm:text-base transition-all ${
+                        isAnswered
+                          ? idx === q.correct
+                            ? 'border-emerald-500 bg-emerald-950/70 text-emerald-200'
+                            : selectedOpt === idx
+                            ? 'border-rose-500 bg-rose-950/70 text-rose-200'
+                            : 'border-slate-800 opacity-50'
+                          : 'border-slate-700 bg-slate-950/60 hover:border-cyan-400 text-slate-200'
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+
+                {isAnswered && (
+                  <div className="mt-6 pt-4 border-t border-slate-800 flex flex-col gap-3">
+                    <p className="text-xs sm:text-sm text-slate-300 text-right leading-relaxed">
+                      💡 <b>معلومة فلكية:</b> {q.explanation}
+                    </p>
+                    <div className="flex justify-end">
+                      <button onClick={nextQuestion} className="px-6 py-2.5 bg-cyan-500 text-slate-950 font-bold rounded-2xl text-sm hover:bg-cyan-400 cursor-pointer">
+                        السؤال التالي ➡️
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </main>
+          )}
+
+          {/* الشاشة 3: سباق لاعبين على نفس الشاشة */}
+          {view === 'DUEL' && (
+            <main className="max-w-4xl w-full mx-auto my-4 flex flex-col gap-4 z-10">
+              <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl text-center">
+                <span className="text-xs text-cyan-400 font-bold block mb-1">سباق العودة إلى الأرض لشخصين</span>
+                <h2 className="text-lg sm:text-xl font-bold text-white mb-2">{q.question}</h2>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="p-3 bg-cyan-950/30 border border-cyan-500/40 rounded-xl">
+                  <span className="text-cyan-300 font-bold block mb-1">لاعب 1 (الأزرق): {p1Dist.toLocaleString()} كم</span>
+                  <div className="h-2 bg-slate-950 rounded-full overflow-hidden">
+                    <div className="h-full bg-cyan-400" style={{ width: `${p1Prog}%` }} />
+                  </div>
+                </div>
+
+                <div className="p-3 bg-rose-950/30 border border-rose-500/40 rounded-xl">
+                  <span className="text-rose-300 font-bold block mb-1">لاعب 2 (البرتقالي): {p2Dist.toLocaleString()} كم</span>
+                  <div className="h-2 bg-slate-950 rounded-full overflow-hidden">
+                    <div className="h-full bg-rose-400" style={{ width: `${p2Prog}%` }} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="p-4 bg-slate-900/80 border border-cyan-500/30 rounded-2xl">
+                  <h3 className="font-bold text-cyan-300 mb-2 text-right">تحكم لاعب 1</h3>
+                  <div className="flex flex-col gap-2">
+                    {q.options.map((opt, idx) => (
+                      <button
+                        key={idx}
+                        disabled={p1Locked}
+                        onClick={() => {
+                          setP1Locked(true);
+                          if (idx === q.correct) setP1Dist(d => Math.max(0, d - 12000));
+                          else setP1Dist(d => Math.min(120000, d + 8000));
+                        }}
+                        className={`p-2.5 rounded-xl border text-right text-xs font-semibold ${p1Locked ? 'opacity-50' : 'hover:border-cyan-400 border-slate-700 bg-slate-950'}`}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-900/80 border border-rose-500/30 rounded-2xl">
+                  <h3 className="font-bold text-rose-300 mb-2 text-right">تحكم لاعب 2</h3>
+                  <div className="flex flex-col gap-2">
+                    {q.options.map((opt, idx) => (
+                      <button
+                        key={idx}
+                        disabled={p2Locked}
+                        onClick={() => {
+                          setP2Locked(true);
+                          if (idx === q.correct) setP2Dist(d => Math.max(0, d - 12000));
+                          else setP2Dist(d => Math.min(120000, d + 8000));
+                        }}
+                        className={`p-2.5 rounded-xl border text-right text-xs font-semibold ${p2Locked ? 'opacity-50' : 'hover:border-rose-400 border-slate-700 bg-slate-950'}`}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {p1Locked && p2Locked && (
+                <div className="flex justify-center mt-2">
+                  <button
+                    onClick={() => {
+                      setP1Locked(false);
+                      setP2Locked(false);
+                      setCurrentQIndex(i => i + 1);
+                    }}
+                    className="px-6 py-2 bg-cyan-500 text-slate-950 font-bold rounded-xl text-sm"
+                  >
+                    السؤال التالي ➡️
+                  </button>
+                </div>
+              )}
+            </main>
+          )}
+
+          {/* الشاشة 4: احتفال الوصول إلى كوكب الأرض والألعاب النارية */}
+          {view === 'VICTORY' && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90">
+              <Fireworks />
+              <div className="relative z-10 max-w-lg w-full bg-slate-900/90 border border-amber-400/60 p-8 rounded-3xl text-center shadow-2xl backdrop-blur-md animate-bounce-happy">
+                <div className="text-6xl mb-3">🌍 🎆 🏆</div>
+                <h2 className="text-3xl font-extrabold text-amber-300 mb-2">أهلاً بعودتك لكوكب الأرض!</h2>
+                <p className="text-sm text-slate-300 mb-6 leading-relaxed">
+                  احتفالات عارمة وألعاب نارية تنير سماء الأرض ابتهاجاً بنجاتك وعودتك بسلام!
+                </p>
+                <div className="p-3 bg-slate-950 rounded-2xl border border-slate-800 mb-6 font-mono text-cyan-300 font-bold">
+                  المسافة: 0 كم (تم إنقاذ رائد الفضاء بنجاح!)
+                </div>
+                <button
+                  onClick={() => {
+                    setDistance(100000);
+                    setView('SOLO');
+                  }}
+                  className="w-full py-3 bg-emerald-500 text-slate-950 font-bold rounded-2xl cursor-pointer hover:bg-emerald-400"
+                >
+                  خوض رحلة جديدة
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* متجر الفضاء */}
+          {showShop && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+              <div className="bg-slate-900 border border-slate-700 p-6 rounded-3xl max-w-md w-full text-right">
+                <div className="flex justify-between items-center mb-4">
+                  <span className="font-mono text-amber-300 font-bold">💰 {coins} كوينز</span>
+                  <h3 className="text-lg font-bold text-white">🛍️ متجر الفضاء</h3>
+                </div>
+                <div className="space-y-3 mb-6">
+                  <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex justify-between items-center">
+                    <button onClick={() => { sound.playCoin(); setCoins(c => c + 300); }} className="px-3 py-1 bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 rounded-lg text-xs font-bold">
+                      +300 كوينز مجانية
+                    </button>
+                    <span className="text-xs text-slate-300">مكافأة تجربة سريعة</span>
+                  </div>
+                  <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex justify-between items-center">
+                    <span className="text-xs text-cyan-300 font-bold">مُجهّزة ✅</span>
+                    <span className="text-xs text-slate-300">بدلة أبولو الكلاسيكية</span>
+                  </div>
+                  <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex justify-between items-center">
+                    <span className="text-xs text-amber-300 font-bold">300 كوينز</span>
+                    <span className="text-xs text-slate-300">بدلة تيتان الذهبية</span>
+                  </div>
+                </div>
+                <button onClick={() => setShowShop(false)} className="w-full py-2 bg-cyan-500 text-slate-950 font-bold rounded-xl text-sm">
+                  إغلاق المتجر
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* الفوتر */}
+          <footer className="text-center text-xs text-slate-500 py-2 z-10 font-mono">
+            لعبة رائد الفضاء التائه · تعمل مباشرة في أي متصفح ويب بدون إنترنت
+          </footer>
+
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+    </html>
